@@ -1,0 +1,23 @@
+# Claude Code documentation
+.claude/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+
+# Credentials (should never be committed)
+INSTALL_CREDENTIALS.txt

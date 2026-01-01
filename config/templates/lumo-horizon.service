@@ -1,0 +1,28 @@
+[Unit]
+Description=Lumo Horizon Queue Manager
+After=network.target redis-server.service
+Requires=redis-server.service
+Documentation=https://laravel.com/docs/horizon
+
+[Service]
+Type=simple
+User={{LUMO_USER}}
+Group={{LUMO_GROUP}}
+WorkingDirectory={{INSTALL_DIR}}
+ExecStart=/usr/bin/php artisan horizon
+ExecStop=/usr/bin/php artisan horizon:terminate
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Restart limits to prevent infinite restart loops
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Use journald for logging (more reliable than file append)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lumo-horizon
+
+[Install]
+WantedBy=multi-user.target

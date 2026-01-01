@@ -1,0 +1,40 @@
+[Unit]
+Description=Lumo Privilege Daemon
+After=network.target redis-server.service
+Wants=redis-server.service
+Documentation=https://github.com/lumopanel/daemon
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/lumo-daemon --config /etc/lumo/daemon.toml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Restart limits to prevent infinite restart loops
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Security hardening
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=false
+PrivateTmp=true
+
+# Paths the daemon needs write access to
+ReadWritePaths=/var/run/lumo /var/log/lumo
+ReadWritePaths=/etc/nginx /etc/php
+ReadWritePaths=/var/www /home
+ReadWritePaths=/etc/letsencrypt /var/lib/letsencrypt
+ReadWritePaths=/etc/apt /var/lib/apt /var/cache/apt
+ReadWritePaths=/etc/redis /var/lib/redis /var/log/redis
+ReadWritePaths=/etc/mysql /var/lib/mysql
+ReadWritePaths=/etc/postgresql /var/lib/postgresql
+
+# Use journald for logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lumo-daemon
+
+[Install]
+WantedBy=multi-user.target
