@@ -318,7 +318,7 @@ daemon_ping() {
 }
 
 wait_for_daemon() {
-    local max_attempts=30
+    local max_attempts=10
     local attempt=0
     local wait_time=1
 

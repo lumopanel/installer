@@ -142,8 +142,45 @@ configure_daemon() {
 # Daemon Service
 # =============================================================================
 
+# Ensure all directories referenced in systemd ReadWritePaths exist
+# This prevents namespace setup failures when starting the service
+ensure_daemon_paths() {
+    log_info "Ensuring required directories exist for daemon..."
+
+    # Directories from systemd service ReadWritePaths
+    local paths=(
+        "/var/run/lumo"
+        "/var/log/lumo"
+        "/etc/nginx"
+        "/etc/php"
+        "/var/www"
+        "/etc/letsencrypt"
+        "/var/lib/letsencrypt"
+        "/etc/apt"
+        "/var/lib/apt"
+        "/var/cache/apt"
+        "/etc/redis"
+        "/var/lib/redis"
+        "/var/log/redis"
+        "/etc/mysql"
+        "/var/lib/mysql"
+        "/etc/postgresql"
+        "/var/lib/postgresql"
+    )
+
+    for path in "${paths[@]}"; do
+        if [[ ! -d "$path" ]]; then
+            log_info "Creating directory: $path"
+            mkdir -p "$path"
+        fi
+    done
+}
+
 create_daemon_service() {
     log_step "Creating Daemon systemd service"
+
+    # Ensure all paths exist before starting (prevents namespace failures)
+    ensure_daemon_paths
 
     copy_template "lumo-daemon.service" "/etc/systemd/system/lumo-daemon.service" "root" "root" "0644"
 

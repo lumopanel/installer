@@ -1,7 +1,6 @@
 [Unit]
 Description=Lumo Privilege Daemon
-After=network.target redis-server.service
-Wants=redis-server.service
+After=network.target
 Documentation=https://github.com/lumopanel/daemon
 
 [Service]
