@@ -17,7 +17,7 @@ StartLimitBurst=5
 
 # Security hardening
 NoNewPrivileges=false
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=false
 PrivateTmp=true
 
