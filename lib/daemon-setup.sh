@@ -32,11 +32,24 @@ install_daemon() {
 
     local arch
     arch=$(uname -m)
-    local download_url="https://github.com/lumopanel/daemon/releases/latest/download/lumo-daemon-linux-${arch}"
 
-    if curl -fsSL -o /usr/bin/lumo-daemon "$download_url" 2>/dev/null; then
+    # Map architecture names
+    case "$arch" in
+        x86_64)  arch="x86_64" ;;
+        aarch64) arch="aarch64" ;;
+        arm64)   arch="aarch64" ;;
+        *)       die "Unsupported architecture: $arch" ;;
+    esac
+
+    local download_url="https://github.com/lumopanel/daemon/releases/latest/download/lumo-daemon-${arch}-linux.tar.gz"
+    local temp_tar="/tmp/lumo-daemon.tar.gz"
+
+    if curl -fsSL -o "$temp_tar" "$download_url" 2>/dev/null; then
+        # Extract binary from tarball
+        tar -xzf "$temp_tar" -C /usr/bin/
+        rm -f "$temp_tar"
         chmod 755 /usr/bin/lumo-daemon
-        log_success "Daemon binary downloaded"
+        log_success "Daemon binary downloaded and extracted"
     else
         log_warning "Could not download pre-built binary, attempting to build from source..."
 
