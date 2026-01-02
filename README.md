@@ -8,8 +8,25 @@ Automated installation script for the Lumo Server Management Panel and Daemon on
 - Root access (sudo)
 - A domain name pointing to your server
 - Ports 80 and 443 open for HTTP/HTTPS
+- curl or wget (for the bootstrap installer)
 
 ## Quick Start
+
+Run this single command to download and start the installer:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh | sudo bash
+```
+
+Or with wget:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh | sudo bash
+```
+
+### Alternative: Clone Repository
+
+If you prefer to clone the repository (requires git):
 
 ```bash
 git clone https://github.com/lumopanel/installer.git
@@ -32,6 +49,7 @@ sudo bash install.sh
 
 ```
 installer/
+├── bootstrap.sh                  # One-liner installer (no git required)
 ├── install.sh                    # Main entry point
 ├── config/
 │   ├── defaults.conf             # Configuration defaults
