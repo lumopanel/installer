@@ -44,14 +44,33 @@ install_daemon() {
     local download_url="https://github.com/lumopanel/daemon/releases/latest/download/lumo-daemon-${arch}-linux.tar.gz"
     local temp_tar="/tmp/lumo-daemon.tar.gz"
 
-    if curl -fsSL -o "$temp_tar" "$download_url" 2>/dev/null; then
+    log_info "Download URL: $download_url"
+    log_info "Architecture: $arch"
+
+    local curl_exit_code
+    local curl_output
+    curl_output=$(curl -fsSL -o "$temp_tar" -w "%{http_code}" "$download_url" 2>&1) || curl_exit_code=$?
+
+    if [[ -z "${curl_exit_code:-}" ]] && [[ -f "$temp_tar" ]] && [[ -s "$temp_tar" ]]; then
         # Extract binary from tarball
-        tar -xzf "$temp_tar" -C /usr/bin/
-        rm -f "$temp_tar"
-        chmod 755 /usr/bin/lumo-daemon
-        log_success "Daemon binary downloaded and extracted"
+        if tar -xzf "$temp_tar" -C /usr/bin/ 2>&1; then
+            rm -f "$temp_tar"
+            chmod 755 /usr/bin/lumo-daemon
+            log_success "Daemon binary downloaded and extracted"
+        else
+            rm -f "$temp_tar"
+            log_error "Failed to extract daemon tarball"
+            die "The downloaded file may be corrupted or in an unexpected format"
+        fi
     else
-        log_warning "Could not download pre-built binary, attempting to build from source..."
+        log_warning "Could not download pre-built binary"
+        log_warning "  URL: $download_url"
+        log_warning "  Architecture: $arch (from uname -m: $(uname -m))"
+        log_warning "  HTTP response: ${curl_output:-unknown}"
+        log_warning "  Curl exit code: ${curl_exit_code:-0}"
+        rm -f "$temp_tar" 2>/dev/null || true
+
+        log_info "Attempting to build from source..."
 
         if command_exists cargo; then
             log_info "Rust found, building daemon from source..."
@@ -67,10 +86,17 @@ install_daemon() {
                 rm -rf "$temp_dir"
                 log_success "Daemon built from source"
             else
-                die "Could not clone daemon repository"
+                die "Could not clone daemon repository from https://github.com/lumopanel/daemon.git (branch: $DAEMON_VERSION)"
             fi
         else
-            die "Could not download daemon and Rust is not installed. Please install manually: https://github.com/lumopanel/daemon/releases"
+            log_error "Rust/Cargo is not installed, cannot build from source"
+            log_error ""
+            log_error "To fix this, either:"
+            log_error "  1. Download the daemon manually from: https://github.com/lumopanel/daemon/releases"
+            log_error "  2. Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+            log_error ""
+            log_error "Expected binary URL: $download_url"
+            die "Daemon installation failed"
         fi
     fi
 
