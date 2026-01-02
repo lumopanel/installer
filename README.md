@@ -15,13 +15,13 @@ Automated installation script for the Lumo Server Management Panel and Daemon on
 Run this single command to download and start the installer:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh | sudo bash
+curl -sSL "https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh?$(date +%s)" | sudo bash
 ```
 
 Or with wget:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh | sudo bash
+wget -qO- "https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh?$(date +%s)" | sudo bash
 ```
 
 ### Alternative: Clone Repository

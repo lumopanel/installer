@@ -5,8 +5,8 @@
 # This script downloads and runs the Lumo installer without requiring git.
 # It can be run directly via curl or wget:
 #
-#   curl -sSL https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh | sudo bash
-#   wget -qO- https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh | sudo bash
+#   curl -sSL "https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh?$(date +%s)" | sudo bash
+#   wget -qO- "https://raw.githubusercontent.com/lumopanel/installer/main/bootstrap.sh?$(date +%s)" | sudo bash
 #
 
 set -euo pipefail
@@ -153,9 +153,13 @@ download_installer() {
     local total=${#FILES[@]}
     local current=0
 
+    # Cache-busting timestamp
+    local cache_bust
+    cache_bust="$(date +%s)"
+
     for file in "${FILES[@]}"; do
         current=$((current + 1))
-        local url="${REPO_URL}/${file}"
+        local url="${REPO_URL}/${file}?${cache_bust}"
         local output="${INSTALL_TMP}/${file}"
 
         # Show progress
