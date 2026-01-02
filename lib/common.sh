@@ -85,7 +85,13 @@ confirm() {
         prompt="$prompt [y/N]: "
     fi
 
-    read -rp "$prompt" response
+    # Use /dev/tty if stdin is not a terminal (e.g., curl | bash)
+    if [[ -t 0 ]]; then
+        read -rp "$prompt" response
+    else
+        printf "%s" "$prompt"
+        read -r response < /dev/tty
+    fi
     response="${response:-$default}"
 
     [[ "$response" =~ ^[Yy]$ ]]
@@ -98,10 +104,21 @@ prompt_input() {
     local response
 
     if [[ -n "$default" ]]; then
-        read -rp "$prompt [$default]: " response
+        # Use /dev/tty if stdin is not a terminal (e.g., curl | bash)
+        if [[ -t 0 ]]; then
+            read -rp "$prompt [$default]: " response
+        else
+            printf "%s" "$prompt [$default]: "
+            read -r response < /dev/tty
+        fi
         response="${response:-$default}"
     else
-        read -rp "$prompt: " response
+        if [[ -t 0 ]]; then
+            read -rp "$prompt: " response
+        else
+            printf "%s" "$prompt: "
+            read -r response < /dev/tty
+        fi
     fi
 
     printf -v "$var_name" '%s' "$response"

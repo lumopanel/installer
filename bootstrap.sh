@@ -206,7 +206,14 @@ main() {
     echo
 
     cd "$INSTALL_TMP"
-    exec bash install.sh "$@"
+
+    # When run via curl|bash, stdin is consumed by curl.
+    # Redirect stdin from /dev/tty to allow interactive prompts.
+    if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
+        exec bash install.sh "$@" < /dev/tty
+    else
+        exec bash install.sh "$@"
+    fi
 }
 
 main "$@"
