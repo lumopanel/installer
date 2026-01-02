@@ -228,9 +228,13 @@ install_nodejs() {
 install_composer() {
     log_step "Installing Composer"
 
+    # Prevent Composer from doing interactive prompts or update checks
+    export COMPOSER_NO_INTERACTION=1
+    export COMPOSER_ALLOW_SUPERUSER=1
+
     if command_exists composer; then
         log_info "Composer already installed, updating..."
-        composer self-update 2>/dev/null || true
+        composer self-update --no-interaction 2>/dev/null || true
     else
         local expected_signature
         expected_signature=$(curl -sS https://composer.github.io/installer.sig)
@@ -249,5 +253,10 @@ install_composer() {
         rm -f /tmp/composer-setup.php
     fi
 
-    log_success "Composer installed: $(composer --version 2>/dev/null | head -1 || echo 'unknown')"
+    # Verify installation without network calls
+    if [[ -x /usr/local/bin/composer ]]; then
+        log_success "Composer installed"
+    else
+        die "Composer installation failed"
+    fi
 }
