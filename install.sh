@@ -63,6 +63,11 @@ DB_NAME=""
 DB_USER=""
 DB_PASSWORD=""
 
+# Tracking installed services and versions
+declare -a INSTALLED_SERVICES=()
+declare -a INSTALLED_PHP_VERSIONS=()
+ADMIN_PASSWORD=""
+
 # =============================================================================
 # User Input Collection
 # =============================================================================
@@ -183,6 +188,14 @@ print_summary() {
     echo -e "${BOLD}Panel URL:${NC} ${protocol}://${DOMAIN}"
     echo -e "${BOLD}Horizon Dashboard:${NC} ${protocol}://${DOMAIN}/horizon"
     echo
+    echo -e "${BOLD}Administrator Account:${NC}"
+    echo -e "  Username: ${CYAN}administrator${NC}"
+    if [[ -n "$ADMIN_PASSWORD" ]]; then
+        echo -e "  Password: ${CYAN}${ADMIN_PASSWORD}${NC}"
+    else
+        echo -e "  Password: ${YELLOW}(check artisan output above)${NC}"
+    fi
+    echo
     echo -e "${BOLD}Installation Directory:${NC} ${INSTALL_DIR}"
     echo -e "${BOLD}Daemon Config:${NC} ${DAEMON_CONFIG_DIR}/daemon.toml"
     echo
@@ -227,8 +240,8 @@ print_summary() {
     fi
 
     echo -e "${BOLD}Next Steps:${NC}"
-    echo -e "  1. Visit ${protocol}://${DOMAIN} to complete setup"
-    echo -e "  2. Create your admin account"
+    echo -e "  1. Visit ${protocol}://${DOMAIN} and log in as 'administrator'"
+    echo -e "  2. Change your password after first login"
     echo -e "  3. Configure your servers"
     echo
 
@@ -241,6 +254,11 @@ Generated: $(date)
 
 Domain: ${DOMAIN}
 Installation Directory: ${INSTALL_DIR}
+
+Administrator Account:
+  Username: administrator
+  Email: ${SSL_EMAIL}
+  Password: ${ADMIN_PASSWORD:-N/A}
 
 System User:
   Username: ${LUMO_USER}
@@ -272,6 +290,90 @@ EOF
 }
 
 # =============================================================================
+# Service Version Detection
+# =============================================================================
+
+get_nginx_version() {
+    nginx -v 2>&1 | grep -oP 'nginx/\K[\d.]+' || echo "unknown"
+}
+
+get_mysql_version() {
+    mysql --version 2>/dev/null | grep -oP '[\d]+\.[\d]+' | head -1 || echo "unknown"
+}
+
+get_postgresql_version() {
+    psql --version 2>/dev/null | grep -oP '[\d]+\.[\d]+' | head -1 || echo "unknown"
+}
+
+get_redis_version() {
+    redis-server --version 2>/dev/null | grep -oP 'v=\K[\d.]+' || echo "unknown"
+}
+
+get_php_version() {
+    php -v 2>/dev/null | head -1 | grep -oP 'PHP \K[\d.]+' | cut -d. -f1,2 || echo "unknown"
+}
+
+track_installed_service() {
+    local type="$1"
+    local version="$2"
+    INSTALLED_SERVICES+=("{\"type\":\"${type}\",\"version\":\"${version}\"}")
+}
+
+track_installed_php() {
+    local version="$1"
+    INSTALLED_PHP_VERSIONS+=("{\"version\":\"${version}\"}")
+}
+
+# =============================================================================
+# Admin User Setup
+# =============================================================================
+
+run_lumo_setup() {
+    log_step "Creating administrator account"
+
+    # Build services JSON array
+    local services_json="["
+    local first=true
+    for svc in "${INSTALLED_SERVICES[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            first=false
+        else
+            services_json+=","
+        fi
+        services_json+="$svc"
+    done
+    services_json+="]"
+
+    # Build PHP versions JSON array
+    local php_json="["
+    first=true
+    for ver in "${INSTALLED_PHP_VERSIONS[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            first=false
+        else
+            php_json+=","
+        fi
+        php_json+="$ver"
+    done
+    php_json+="]"
+
+    log_info "Registering services: $services_json"
+    log_info "Registering PHP versions: $php_json"
+
+    # Run the artisan command and capture the password
+    cd "$INSTALL_DIR"
+    ADMIN_PASSWORD=$(sudo -u "$LUMO_USER" php artisan lumo:setup "$SSL_EMAIL" \
+        --services="$services_json" \
+        --php-versions="$php_json" 2>/dev/null | tail -1)
+
+    if [[ -z "$ADMIN_PASSWORD" ]]; then
+        log_warning "Could not retrieve admin password from setup command"
+    else
+        log_success "Administrator account created"
+    fi
+}
+
+# =============================================================================
 # Main Installation Flow
 # =============================================================================
 
@@ -296,16 +398,28 @@ main() {
     # Phase 3: Core Services
     log_step "Phase 3: Core Services"
     install_redis
+    track_installed_service "redis" "$(get_redis_version)"
+
     install_nginx
+    track_installed_service "nginx" "$(get_nginx_version)"
+
     install_php
+    track_installed_php "$(get_php_version)"
+
     configure_php_fpm_pool
     install_certbot
     install_nodejs
 
     # Install database
     case "$DB_CONNECTION" in
-        mysql) install_mysql ;;
-        pgsql) install_postgresql ;;
+        mysql)
+            install_mysql
+            track_installed_service "mysql" "$(get_mysql_version)"
+            ;;
+        pgsql)
+            install_postgresql
+            track_installed_service "postgresql" "$(get_postgresql_version)"
+            ;;
     esac
 
     install_composer
@@ -326,6 +440,10 @@ main() {
     create_horizon_service
     setup_scheduler
     start_services
+
+    # Phase 6: Admin Setup
+    log_step "Phase 6: Admin Setup"
+    run_lumo_setup
 
     # Clear cleanup tasks on success
     clear_cleanup_tasks
