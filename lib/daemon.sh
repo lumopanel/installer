@@ -10,7 +10,7 @@ readonly _DAEMON_SH_LOADED=1
 HMAC_SECRET=""
 HMAC_SECRET_PATH=""
 DAEMON_SECRET=""
-USE_DAEMON=true
+USE_DAEMON=false  # Start disabled, enable after daemon is confirmed working
 
 # =============================================================================
 # HMAC Signature Generation
@@ -323,14 +323,30 @@ wait_for_daemon() {
     local wait_time=1
 
     log_info "Waiting for daemon to be ready..."
+    log_info "Socket path: ${DAEMON_SOCKET_PATH}"
+
+    # First check if socket file exists
+    if [[ ! -S "$DAEMON_SOCKET_PATH" ]]; then
+        log_info "Waiting for socket file to be created..."
+    fi
 
     while [[ $attempt -lt $max_attempts ]]; do
-        if daemon_ping; then
+        if [[ -S "$DAEMON_SOCKET_PATH" ]] && daemon_ping; then
             log_success "Daemon is ready"
             return 0
         fi
 
         attempt=$((attempt + 1))
+
+        # Show progress every 5 attempts
+        if (( attempt % 5 == 0 )); then
+            if [[ -S "$DAEMON_SOCKET_PATH" ]]; then
+                log_info "Attempt ${attempt}/${max_attempts}: Socket exists, waiting for response..."
+            else
+                log_info "Attempt ${attempt}/${max_attempts}: Waiting for socket file..."
+            fi
+        fi
+
         sleep $wait_time
 
         if [[ $wait_time -lt 5 ]]; then
@@ -338,19 +354,148 @@ wait_for_daemon() {
         fi
     done
 
-    log_error "Daemon failed to respond after ${max_attempts} attempts"
     return 1
+}
+
+diagnose_daemon_failure() {
+    log_step "Diagnosing Daemon Failure"
+
+    echo
+    log_error "The Lumo daemon failed to start or respond."
+    echo
+
+    # Check service status
+    log_info "Service status:"
+    echo "----------------------------------------"
+    systemctl status lumo-daemon --no-pager 2>&1 || true
+    echo "----------------------------------------"
+    echo
+
+    # Check if binary exists and is executable
+    if [[ -x /usr/bin/lumo-daemon ]]; then
+        log_info "Daemon binary: /usr/bin/lumo-daemon (exists, executable)"
+
+        # Try to get version
+        local version_output
+        if version_output=$(/usr/bin/lumo-daemon --version 2>&1); then
+            log_info "Daemon version: $version_output"
+        else
+            log_warning "Could not get daemon version: $version_output"
+        fi
+    else
+        log_error "Daemon binary missing or not executable: /usr/bin/lumo-daemon"
+    fi
+
+    # Check config file
+    if [[ -f "${DAEMON_CONFIG_DIR}/daemon.toml" ]]; then
+        log_info "Config file: ${DAEMON_CONFIG_DIR}/daemon.toml (exists)"
+    else
+        log_error "Config file missing: ${DAEMON_CONFIG_DIR}/daemon.toml"
+    fi
+
+    # Check HMAC secret
+    if [[ -f "${DAEMON_CONFIG_DIR}/hmac.key" ]]; then
+        log_info "HMAC key: ${DAEMON_CONFIG_DIR}/hmac.key (exists)"
+    else
+        log_error "HMAC key missing: ${DAEMON_CONFIG_DIR}/hmac.key"
+    fi
+
+    # Check socket directory
+    if [[ -d "$DAEMON_SOCKET_DIR" ]]; then
+        log_info "Socket directory: $DAEMON_SOCKET_DIR (exists)"
+        ls -la "$DAEMON_SOCKET_DIR" 2>&1 || true
+    else
+        log_error "Socket directory missing: $DAEMON_SOCKET_DIR"
+    fi
+
+    # Check socket file
+    if [[ -S "$DAEMON_SOCKET_PATH" ]]; then
+        log_info "Socket file: $DAEMON_SOCKET_PATH (exists)"
+    else
+        log_warning "Socket file not created: $DAEMON_SOCKET_PATH"
+    fi
+
+    # Get recent journal logs
+    echo
+    log_info "Recent daemon logs (last 50 lines):"
+    echo "----------------------------------------"
+    journalctl -u lumo-daemon -n 50 --no-pager 2>&1 || true
+    echo "----------------------------------------"
+    echo
+}
+
+cleanup_daemon_installation() {
+    log_step "Cleaning Up Failed Daemon Installation"
+
+    # Stop and disable service
+    log_info "Stopping daemon service..."
+    systemctl stop lumo-daemon 2>/dev/null || true
+    systemctl disable lumo-daemon 2>/dev/null || true
+
+    # Remove service file
+    if [[ -f /etc/systemd/system/lumo-daemon.service ]]; then
+        log_info "Removing service file..."
+        rm -f /etc/systemd/system/lumo-daemon.service
+        systemctl daemon-reload
+    fi
+
+    # Remove binary
+    if [[ -f /usr/bin/lumo-daemon ]]; then
+        log_info "Removing daemon binary..."
+        rm -f /usr/bin/lumo-daemon
+    fi
+
+    # Remove config directory
+    if [[ -d "$DAEMON_CONFIG_DIR" ]]; then
+        log_info "Removing config directory: $DAEMON_CONFIG_DIR"
+        rm -rf "$DAEMON_CONFIG_DIR"
+    fi
+
+    # Remove socket directory
+    if [[ -d "$DAEMON_SOCKET_DIR" ]]; then
+        log_info "Removing socket directory: $DAEMON_SOCKET_DIR"
+        rm -rf "$DAEMON_SOCKET_DIR"
+    fi
+
+    # Remove log directory
+    if [[ -d "$DAEMON_LOG_DIR" ]]; then
+        log_info "Removing log directory: $DAEMON_LOG_DIR"
+        rm -rf "$DAEMON_LOG_DIR"
+    fi
+
+    log_success "Cleanup complete"
 }
 
 init_daemon_communication() {
     log_step "Initializing daemon communication"
 
-    if ! wait_for_daemon; then
-        log_warning "Daemon communication failed. Falling back to direct installation."
-        USE_DAEMON=false
-        return 1
+    if wait_for_daemon; then
+        USE_DAEMON=true
+        log_success "Daemon communication established"
+        return 0
     fi
 
-    log_success "Daemon communication established"
-    return 0
+    # Daemon failed to start - diagnose, cleanup, and exit
+    diagnose_daemon_failure
+    cleanup_daemon_installation
+
+    echo
+    log_error "============================================="
+    log_error "  INSTALLATION FAILED: Daemon not working"
+    log_error "============================================="
+    echo
+    log_error "The Lumo daemon is required but failed to start."
+    log_error "Please review the diagnostic information above."
+    echo
+    log_info "Common causes:"
+    log_info "  - Incompatible binary architecture"
+    log_info "  - Missing system dependencies (glibc, etc.)"
+    log_info "  - Configuration file errors"
+    log_info "  - Permission issues"
+    echo
+    log_info "To retry installation, run the installer again."
+    log_info "For help, visit: https://github.com/lumopanel/installer/issues"
+    echo
+
+    exit 1
 }

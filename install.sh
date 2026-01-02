@@ -393,7 +393,7 @@ main() {
     install_daemon
     configure_daemon
     create_daemon_service
-    init_daemon_communication || true
+    init_daemon_communication  # Exits on failure with diagnostics
 
     # Phase 3: Core Services
     log_step "Phase 3: Core Services"
